@@ -35,6 +35,7 @@ class HUDElement(StrEnum):
     power = auto()
     player_stats = auto()
     ball_in_hand = auto()
+    multiplayer_stats = auto()
 
 
 class HUD:
@@ -54,6 +55,7 @@ class HUD:
             HUDElement.power: Power(),
             HUDElement.player_stats: PlayerStats(),
             HUDElement.ball_in_hand: BallInHand(),
+            HUDElement.multiplayer_stats: MultiplayerStats(),
         }
 
         for element in self.elements.values():
@@ -729,6 +731,116 @@ class BallInHand(BaseHUDElement):
         if hasattr(self, "text") and self.text is not None:
             self.text.hide()
             del self.text
+
+
+class MultiplayerStats(BaseHUDElement):
+    """HUD element showing multiplayer game status."""
+
+    def __init__(self):
+        BaseHUDElement.__init__(self)
+        self.text_scale = 0.04
+        self.position = (1.55, 0.9)  # Top right
+        self.header_text = None
+        self.player_texts = []
+        self.status_text = None
+        self.is_active = False
+
+    def init(self):
+        self.destroy()
+
+        # Header
+        self.header_text = autils.CustomOnscreenText(
+            text="MULTIPLAYER",
+            pos=self.position,
+            scale=self.text_scale * 1.1,
+            fg=(0.3, 0.8, 0.9, 1),
+            align=TextNode.ARight,
+            mayChange=True,
+        )
+        self.header_text.hide()
+
+        # Status text (connection status, whose turn, etc.)
+        self.status_text = autils.CustomOnscreenText(
+            text="",
+            pos=(self.position[0], self.position[1] - 0.05),
+            scale=self.text_scale * 0.8,
+            fg=(0.6, 0.6, 0.6, 1),
+            align=TextNode.ARight,
+            mayChange=True,
+        )
+        self.status_text.hide()
+
+    def update(self, client=None):
+        """Update multiplayer stats display."""
+        if client is None or not client.is_connected:
+            self.hide()
+            self.is_active = False
+            return
+
+        self.is_active = True
+        self.header_text.show()
+        self.status_text.show()
+
+        # Clear old player texts
+        for pt in self.player_texts:
+            pt.hide()
+            del pt
+        self.player_texts = []
+
+        room = client.current_room
+        if room:
+            # Show players
+            y_offset = 0.10
+            for i, player in enumerate(room.players):
+                is_you = player.player_id == client.player_id
+                color = (0.3, 0.9, 0.3, 1) if player.is_ready else (0.7, 0.7, 0.7, 1)
+
+                name = player.name
+                if is_you:
+                    name += " (You)"
+
+                player_text = autils.CustomOnscreenText(
+                    text=name,
+                    pos=(self.position[0], self.position[1] - y_offset - i * 0.045),
+                    scale=self.text_scale * 0.85,
+                    fg=color,
+                    align=TextNode.ARight,
+                    mayChange=True,
+                )
+                self.player_texts.append(player_text)
+
+            # Status
+            player_count = len(room.players)
+            self.status_text.setText(f"{player_count} player(s) in room")
+        else:
+            self.status_text.setText("Connecting...")
+
+    def show(self):
+        if self.is_active:
+            self.header_text.show()
+            self.status_text.show()
+            for pt in self.player_texts:
+                pt.show()
+
+    def hide(self):
+        if self.header_text:
+            self.header_text.hide()
+        if self.status_text:
+            self.status_text.hide()
+        for pt in self.player_texts:
+            pt.hide()
+
+    def destroy(self):
+        if hasattr(self, "header_text") and self.header_text:
+            self.header_text.hide()
+            del self.header_text
+        if hasattr(self, "status_text") and self.status_text:
+            self.status_text.hide()
+            del self.status_text
+        for pt in self.player_texts:
+            pt.hide()
+            del pt
+        self.player_texts = []
 
 
 hud = HUD()

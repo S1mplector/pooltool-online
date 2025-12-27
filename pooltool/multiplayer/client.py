@@ -146,6 +146,10 @@ class MultiplayerClient:
         """
         self._send_message(MessageType.PLAYER_READY, {"is_ready": is_ready})
 
+    def start_game(self) -> None:
+        """Start the game (host only). Server will broadcast GAME_START to all players."""
+        self._send_message(MessageType.GAME_START, {})
+
     def send_shot_aim(
         self,
         phi: float,

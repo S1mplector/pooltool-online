@@ -269,11 +269,15 @@ class BallInHandMode(BaseMode):
 
     def remove_grab_selection_highlight(self):
         if self.grabbed_ball is not None:
-            node = self.grabbed_ball.get_node("pos")
-            node.setScale(node.getScale() / ball_highlight["ball_factor"])
-            self.grab_ball_shadow_node.setAlphaScale(1)
-            self.grab_ball_shadow_node.setScale(1)
-            self.grabbed_ball.set_render_state_as_object_state()
+            try:
+                node = self.grabbed_ball.get_node("pos")
+                node.setScale(node.getScale() / ball_highlight["ball_factor"])
+                self.grab_ball_shadow_node.setAlphaScale(1)
+                self.grab_ball_shadow_node.setScale(1)
+                self.grabbed_ball.set_render_state_as_object_state()
+            except (KeyError, AssertionError):
+                # Node may not exist if scene was torn down
+                pass
             tasks.remove("grab_selection_highlight_animation")
 
     def add_grab_selection_highlight(self):
@@ -286,6 +290,10 @@ class BallInHandMode(BaseMode):
             node.setScale(node.getScale() * ball_highlight["ball_factor"])
 
     def grab_selection_highlight_animation(self, task):
+        # Safety check - node may be destroyed if scene torn down
+        if self.grab_ball_node is None or self.grab_ball_node.isEmpty():
+            return task.done
+
         phase = task.time * ball_highlight["ball_frequency"]
 
         new_height = ball_highlight["ball_offset"] + ball_highlight[

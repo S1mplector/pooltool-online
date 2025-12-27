@@ -71,6 +71,7 @@ class MultiplayerServer:
             MessageType.LEAVE_ROOM: self._handle_leave_room,
             MessageType.ROOM_LIST: self._handle_room_list,
             MessageType.PLAYER_READY: self._handle_player_ready,
+            MessageType.GAME_START: self._handle_game_start_request,
             MessageType.SHOT_AIM: self._handle_shot_aim,
             MessageType.SHOT_EXECUTE: self._handle_shot_execute,
             MessageType.CHAT_MESSAGE: self._handle_chat_message,
@@ -430,9 +431,36 @@ class MultiplayerServer:
         )
         await self._broadcast_to_room(room.room_id, update_msg)
 
-        # Check if all players are ready
-        if len(room.players) >= 2 and all(p.is_ready for p in room.players):
-            await self._start_game(room.room_id)
+        # Don't auto-start - wait for host to click START GAME
+        # (removed auto-start logic)
+
+    async def _handle_game_start_request(self, client_id: str, message: GameMessage) -> None:
+        """Handle game start request from host."""
+        client = self.clients.get(client_id)
+        if not client or not client.room_id:
+            return
+
+        room = self.rooms.get(client.room_id)
+        if not room:
+            return
+
+        # Only host can start the game
+        is_host = any(p.player_id == client_id and p.is_host for p in room.players)
+        if not is_host:
+            await self._send_error(client_id, "Only the host can start the game")
+            return
+
+        # Check all players are ready
+        if not all(p.is_ready for p in room.players):
+            await self._send_error(client_id, "All players must be ready")
+            return
+
+        # Need at least 2 players
+        if len(room.players) < 2:
+            await self._send_error(client_id, "Need at least 2 players")
+            return
+
+        await self._start_game(room.room_id)
 
     async def _start_game(self, room_id: str) -> None:
         """Start the game in a room."""

@@ -44,7 +44,8 @@ class PurgatoryMode(BaseMode):
         )
         self.dim_overlay.hide()
 
-    def enter(self):
+    def enter(self, **kwargs):
+        # Accept any kwargs (like load_prev_cam) that other modes might pass
         mouse.mode(MouseMode.ABSOLUTE)
         self.dim_overlay.show()
 
