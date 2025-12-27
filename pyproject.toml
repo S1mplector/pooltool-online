@@ -16,20 +16,20 @@ dirty = true
 ignore-untracked = true
 
 [tool.poetry]
-# The package name is "pooltool". The PyPI project name is "pooltool-billiards"
-name = "pooltool-billiards"
+# The package name is "pooltool". The PyPI project name is "pooltool-online"
+name = "pooltool-online"
 # This version is a placeholder. It will be updated at build time by
 # poetry-dynamic-versioning from the latest git tag. See PYPI.md.
 version = "0.0.0"
-description = "A sandbox billiards game that emphasizes realistic physics."
-repository = "https://github.com/ekiefl/pooltool"
-homepage = "https://pooltool.readthedocs.io/en/latest/"
-documentation = "https://pooltool.readthedocs.io/en/latest/"
-authors = ["Evan Kiefl <kiefl.evan@gmail.com>"]
-maintainers = ["Evan Kiefl <kiefl.evan@gmail.com>"]
+description = "S1mplector presents: A realistic billiards simulator with online multiplayer."
+repository = "https://github.com/ilgazmehmetoglu/pooltool"
+homepage = "https://github.com/ilgazmehmetoglu/pooltool"
+documentation = "https://github.com/ilgazmehmetoglu/pooltool"
+authors = ["S1mplector <ilgazmehmetoglu@example.com>"]
+maintainers = ["S1mplector <ilgazmehmetoglu@example.com>"]
 license = "Apache-2.0"
 readme = "README.md"
-keywords = ["simulation", "physics", "pool", "billiards", "panda3d", "snooker", "eight-ball"]
+keywords = ["simulation", "physics", "pool", "billiards", "panda3d", "snooker", "eight-ball", "multiplayer", "online"]
 classifiers = [
   "Topic :: Scientific/Engineering :: Visualization",
   "Topic :: Scientific/Engineering :: Physics",
@@ -106,6 +106,7 @@ h5py = ">=3.10"
 h11 = ">=0.16.0"  # Avoids security vulnerability
 rich = "^14.0.0"  # 13.8.1 added support for Python 3.13
 numpy-quaternion = ">=2024.0.12"
+pyngrok = ">=7.0.0"  # For internet multiplayer tunneling
 
 [tool.poetry.group.dev.dependencies]
 # Testing and formatting

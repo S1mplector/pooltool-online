@@ -1,7 +1,12 @@
 #! /usr/bin/env python
-"""Multiplayer menu UI for online pool games."""
+"""Simplified multiplayer menu UI - easy host and join over the internet."""
 
 from __future__ import annotations
+
+import socket
+import subprocess
+import sys
+import threading
 
 from direct.gui.DirectGui import (
     DGG,
@@ -9,7 +14,6 @@ from direct.gui.DirectGui import (
     DirectEntry,
     DirectFrame,
     DirectLabel,
-    DirectScrolledList,
 )
 from panda3d.core import TextNode
 
@@ -20,7 +24,6 @@ from pooltool.ani.menu._datatypes import (
     BUTTON_TEXT_SCALE,
     BaseMenu,
     MenuButton,
-    MenuInput,
     MenuTitle,
     TEXT_COLOR,
     TITLE_FONT,
@@ -29,19 +32,78 @@ from pooltool.ani.menu._registry import MenuNavigator
 from pooltool.multiplayer import MultiplayerClient
 from pooltool.multiplayer.protocol import RoomInfo
 
+# Global tunnel state
+_tunnel_url: str | None = None
+_ngrok_process = None
+
+
+def get_local_ip() -> str:
+    """Get the local IP address for sharing with friends."""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "127.0.0.1"
+
+
+def start_tunnel(port: int = 7777) -> str | None:
+    """Start an ngrok tunnel to make server accessible over internet.
+    
+    Returns the public URL if successful, None otherwise.
+    """
+    global _tunnel_url, _ngrok_process
+    
+    try:
+        from pyngrok import ngrok, conf
+        
+        # Configure ngrok
+        conf.get_default().log_level = "ERROR"
+        
+        # Start tunnel
+        tunnel = ngrok.connect(port, "tcp")
+        _tunnel_url = tunnel.public_url  # e.g., "tcp://0.tcp.ngrok.io:12345"
+        
+        # Parse the URL to get host:port
+        if _tunnel_url.startswith("tcp://"):
+            _tunnel_url = _tunnel_url[6:]  # Remove "tcp://" prefix
+        
+        return _tunnel_url
+    except ImportError:
+        # pyngrok not installed - fall back to local only
+        return None
+    except Exception as e:
+        print(f"Failed to start tunnel: {e}")
+        return None
+
+
+def stop_tunnel() -> None:
+    """Stop the ngrok tunnel."""
+    global _tunnel_url, _ngrok_process
+    
+    try:
+        from pyngrok import ngrok
+        ngrok.kill()
+    except Exception:
+        pass
+    
+    _tunnel_url = None
+
 
 class MultiplayerMenu(BaseMenu):
-    """Main multiplayer menu for browsing and joining games."""
+    """Simplified multiplayer menu - Host or Join with minimal clicks."""
 
     name: str = "multiplayer"
 
     def __init__(self) -> None:
         super().__init__()
-
         self.client: MultiplayerClient | None = None
-        self.room_list_frame: DirectScrolledList | None = None
+        self.server_process = None
         self.status_label: DirectLabel | None = None
-        self.rooms: list[dict] = []
+        self.ip_label: DirectLabel | None = None
+        self.public_url: str | None = None
 
         self.title = MenuTitle.create(text="Online Multiplayer")
         self.back_button = MenuButton.create(
@@ -53,232 +115,254 @@ class MultiplayerMenu(BaseMenu):
     def populate(self) -> None:
         self.add_title(self.title)
 
-        # Connection status
-        self._create_status_label()
-
-        # Server connection section
-        self._create_connection_section()
-
-        # Room browser section
-        self._create_room_browser()
-
-        # Action buttons
-        self._create_action_buttons()
-
-        self.add_button(self.back_button)
-
-    def _create_status_label(self) -> None:
-        """Create connection status indicator."""
-        self.status_label = DirectLabel(
-            text="Not Connected",
-            scale=BUTTON_TEXT_SCALE * 0.8,
-            relief=None,
-            text_fg=(0.8, 0.3, 0.3, 1),
-            text_align=TextNode.ALeft,
-            text_font=load_font(TITLE_FONT),
-            parent=self.area.getCanvas(),
-        )
-        self.status_label.setPos(-0.7, 0, 0.55)
-
-    def _create_connection_section(self) -> None:
-        """Create server connection input fields."""
         font = load_font(BUTTON_FONT)
+        title_font = load_font(TITLE_FONT)
 
-        # Host input
-        host_label = DirectLabel(
-            text="Server:",
+        # Status label at top
+        self.status_label = DirectLabel(
+            text="Choose an option below",
             scale=BUTTON_TEXT_SCALE * 0.7,
             relief=None,
-            text_fg=TEXT_COLOR,
-            text_align=TextNode.ALeft,
-            text_font=load_font(TITLE_FONT),
+            text_fg=(0.7, 0.7, 0.7, 1),
+            text_align=TextNode.ACenter,
+            text_font=title_font,
             parent=self.area.getCanvas(),
         )
-        host_label.setPos(-0.7, 0, 0.4)
+        self.status_label.setPos(0, 0, 0.55)
 
-        self.host_entry = DirectEntry(
-            text="",
-            scale=BUTTON_TEXT_SCALE * 0.6,
-            width=12,
-            relief=DGG.SUNKEN,
-            frameColor=(1, 1, 1, 0.7),
-            text_fg=TEXT_COLOR,
+        # ==================== HOST GAME SECTION ====================
+        host_frame = DirectFrame(
+            frameColor=(0.15, 0.15, 0.15, 0.8),
+            frameSize=(-0.75, 0.75, -0.25, 0.15),
+            pos=(0, 0, 0.25),
+            parent=self.area.getCanvas(),
+        )
+
+        host_title = DirectLabel(
+            text="🎮 HOST A GAME",
+            scale=BUTTON_TEXT_SCALE * 0.9,
+            relief=None,
+            text_fg=(0.3, 0.8, 0.3, 1),
+            text_align=TextNode.ACenter,
+            text_font=title_font,
+            parent=host_frame,
+        )
+        host_title.setPos(0, 0, 0.08)
+
+        host_desc = DirectLabel(
+            text="Start a server and invite friends",
+            scale=BUTTON_TEXT_SCALE * 0.5,
+            relief=None,
+            text_fg=(0.6, 0.6, 0.6, 1),
+            text_align=TextNode.ACenter,
             text_font=font,
-            initialText="localhost",
-            numLines=1,
-            parent=self.area.getCanvas(),
+            parent=host_frame,
         )
-        self.host_entry.setPos(-0.35, 0, 0.4)
+        host_desc.setPos(0, 0, 0.0)
 
-        # Port input
-        port_label = DirectLabel(
-            text="Port:",
-            scale=BUTTON_TEXT_SCALE * 0.7,
-            relief=None,
-            text_fg=TEXT_COLOR,
-            text_align=TextNode.ALeft,
-            text_font=load_font(TITLE_FONT),
-            parent=self.area.getCanvas(),
-        )
-        port_label.setPos(0.25, 0, 0.4)
-
-        self.port_entry = DirectEntry(
-            text="",
-            scale=BUTTON_TEXT_SCALE * 0.6,
-            width=6,
-            relief=DGG.SUNKEN,
-            frameColor=(1, 1, 1, 0.7),
-            text_fg=TEXT_COLOR,
+        self.host_button = DirectButton(
+            text="Host Game",
+            text_align=TextNode.ACenter,
             text_font=font,
-            initialText="7777",
-            numLines=1,
+            scale=BUTTON_TEXT_SCALE,
+            relief=DGG.RIDGE,
+            frameColor=(0.2, 0.6, 0.2, 1),
+            frameSize=(-0.25, 0.25, -0.04, 0.06),
+            command=self._host_game,
+            parent=host_frame,
+        )
+        self.host_button.setPos(0, 0, -0.15)
+
+        # ==================== JOIN GAME SECTION ====================
+        join_frame = DirectFrame(
+            frameColor=(0.15, 0.15, 0.15, 0.8),
+            frameSize=(-0.75, 0.75, -0.35, 0.15),
+            pos=(0, 0, -0.25),
             parent=self.area.getCanvas(),
         )
-        self.port_entry.setPos(0.48, 0, 0.4)
 
-        # Name input
-        name_label = DirectLabel(
-            text="Name:",
-            scale=BUTTON_TEXT_SCALE * 0.7,
+        join_title = DirectLabel(
+            text="🌐 JOIN A GAME",
+            scale=BUTTON_TEXT_SCALE * 0.9,
+            relief=None,
+            text_fg=(0.3, 0.6, 0.9, 1),
+            text_align=TextNode.ACenter,
+            text_font=title_font,
+            parent=join_frame,
+        )
+        join_title.setPos(0, 0, 0.08)
+
+        join_desc = DirectLabel(
+            text="Enter the host's IP address",
+            scale=BUTTON_TEXT_SCALE * 0.5,
+            relief=None,
+            text_fg=(0.6, 0.6, 0.6, 1),
+            text_align=TextNode.ACenter,
+            text_font=font,
+            parent=join_frame,
+        )
+        join_desc.setPos(0, 0, 0.0)
+
+        # IP input
+        ip_label = DirectLabel(
+            text="IP:",
+            scale=BUTTON_TEXT_SCALE * 0.6,
             relief=None,
             text_fg=TEXT_COLOR,
-            text_align=TextNode.ALeft,
-            text_font=load_font(TITLE_FONT),
-            parent=self.area.getCanvas(),
+            text_align=TextNode.ARight,
+            text_font=font,
+            parent=join_frame,
         )
-        name_label.setPos(-0.7, 0, 0.25)
+        ip_label.setPos(-0.35, 0, -0.12)
 
-        self.name_entry = DirectEntry(
+        self.ip_entry = DirectEntry(
             text="",
             scale=BUTTON_TEXT_SCALE * 0.6,
             width=15,
             relief=DGG.SUNKEN,
-            frameColor=(1, 1, 1, 0.7),
-            text_fg=TEXT_COLOR,
+            frameColor=(1, 1, 1, 0.9),
+            text_fg=(0, 0, 0, 1),
             text_font=font,
-            initialText="Player",
+            initialText="localhost",
             numLines=1,
-            parent=self.area.getCanvas(),
+            parent=join_frame,
         )
-        self.name_entry.setPos(-0.35, 0, 0.25)
+        self.ip_entry.setPos(-0.25, 0, -0.12)
 
-        # Connect button
-        self.connect_button = DirectButton(
-            text="Connect",
+        self.join_button = DirectButton(
+            text="Join Game",
             text_align=TextNode.ACenter,
             text_font=font,
-            scale=BUTTON_TEXT_SCALE * 0.8,
+            scale=BUTTON_TEXT_SCALE,
             relief=DGG.RIDGE,
-            frameColor=(0.3, 0.7, 0.3, 1),
-            command=self._connect_to_server,
-            parent=self.area.getCanvas(),
+            frameColor=(0.2, 0.4, 0.7, 1),
+            frameSize=(-0.25, 0.25, -0.04, 0.06),
+            command=self._join_game,
+            parent=join_frame,
         )
-        self.connect_button.setPos(0.55, 0, 0.25)
+        self.join_button.setPos(0, 0, -0.25)
 
-    def _create_room_browser(self) -> None:
-        """Create room browser list."""
-        font = load_font(BUTTON_FONT)
-
-        # Room list header
-        room_header = DirectLabel(
-            text="Available Rooms:",
-            scale=BUTTON_TEXT_SCALE * 0.8,
+        # Your IP display (for sharing)
+        local_ip = get_local_ip()
+        self.ip_label = DirectLabel(
+            text=f"Your IP: {local_ip}",
+            scale=BUTTON_TEXT_SCALE * 0.5,
             relief=None,
-            text_fg=TEXT_COLOR,
-            text_align=TextNode.ALeft,
-            text_font=load_font(TITLE_FONT),
-            parent=self.area.getCanvas(),
-        )
-        room_header.setPos(-0.7, 0, 0.05)
-
-        # Room list frame
-        self.room_list_frame = DirectScrolledList(
-            decButton_pos=(0.35, 0, 0.53),
-            decButton_text="^",
-            decButton_text_scale=0.04,
-            decButton_borderWidth=(0.005, 0.005),
-            incButton_pos=(0.35, 0, -0.02),
-            incButton_text="v",
-            incButton_text_scale=0.04,
-            incButton_borderWidth=(0.005, 0.005),
-            frameSize=(-0.75, 0.75, -0.45, 0.0),
-            frameColor=(0.1, 0.1, 0.1, 0.5),
-            pos=(0, 0, -0.15),
-            numItemsVisible=5,
-            forceHeight=0.08,
-            itemFrame_frameSize=(-0.7, 0.65, -0.4, 0.0),
-            itemFrame_pos=(0, 0, 0),
-            parent=self.area.getCanvas(),
-        )
-
-        # Placeholder message
-        self.no_rooms_label = DirectLabel(
-            text="Connect to server to see rooms",
-            scale=BUTTON_TEXT_SCALE * 0.6,
-            relief=None,
-            text_fg=(0.6, 0.6, 0.6, 1),
-            text_font=font,
-            parent=self.area.getCanvas(),
-        )
-        self.no_rooms_label.setPos(0, 0, -0.3)
-
-    def _create_action_buttons(self) -> None:
-        """Create action buttons for room management."""
-        font = load_font(BUTTON_FONT)
-
-        # Create room button
-        self.create_room_button = DirectButton(
-            text="Create Room",
+            text_fg=(0.5, 0.5, 0.5, 1),
             text_align=TextNode.ACenter,
             text_font=font,
-            scale=BUTTON_TEXT_SCALE * 0.8,
-            relief=DGG.RIDGE,
-            frameColor=(0.3, 0.5, 0.8, 1),
-            command=self._show_create_room_dialog,
             parent=self.area.getCanvas(),
-            state=DGG.DISABLED,
         )
-        self.create_room_button.setPos(-0.4, 0, -0.7)
+        self.ip_label.setPos(0, 0, -0.7)
 
-        # Refresh button
-        self.refresh_button = DirectButton(
-            text="Refresh",
-            text_align=TextNode.ACenter,
-            text_font=font,
-            scale=BUTTON_TEXT_SCALE * 0.8,
-            relief=DGG.RIDGE,
-            frameColor=(0.5, 0.5, 0.5, 1),
-            command=self._refresh_rooms,
-            parent=self.area.getCanvas(),
-            state=DGG.DISABLED,
-        )
-        self.refresh_button.setPos(0.4, 0, -0.7)
+        self.add_button(self.back_button)
 
-    def _connect_to_server(self) -> None:
-        """Connect to the multiplayer server."""
-        host = self.host_entry.get()
+    def _update_status(self, text: str, color: tuple = (0.7, 0.7, 0.7, 1)) -> None:
+        """Update status message."""
+        if self.status_label:
+            self.status_label["text"] = text
+            self.status_label["text_fg"] = color
+
+    def _host_game(self) -> None:
+        """Start server and create a game room accessible over internet."""
+        self._update_status("Starting server...", (0.8, 0.8, 0.3, 1))
+
+        # Start the server in a subprocess
         try:
-            port = int(self.port_entry.get())
-        except ValueError:
-            port = 7777
-        name = self.name_entry.get() or "Player"
+            self.server_process = subprocess.Popen(
+                [sys.executable, "-m", "pooltool.multiplayer.server"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
 
-        # Create client if needed
+            # Give server time to start, then create tunnel
+            def setup_and_connect():
+                import time
+                time.sleep(1.0)
+                
+                # Try to create internet tunnel
+                self.public_url = start_tunnel(7777)
+                
+                if self.public_url:
+                    # Update UI on main thread
+                    Global.task_mgr.add(
+                        lambda task: self._on_tunnel_ready(self.public_url),
+                        "tunnel_ready_task"
+                    )
+                else:
+                    # Fall back to LAN only
+                    Global.task_mgr.add(
+                        lambda task: self._connect_as_host_lan(),
+                        "connect_as_host_task"
+                    )
+
+            threading.Thread(target=setup_and_connect, daemon=True).start()
+
+        except Exception as e:
+            self._update_status(f"Failed to start server: {e}", (0.8, 0.3, 0.3, 1))
+
+    def _on_tunnel_ready(self, public_url: str) -> None:
+        """Handle tunnel being ready - update UI and connect."""
+        # Update IP label to show public URL
+        if self.ip_label:
+            self.ip_label["text"] = f"Share this address: {public_url}"
+            self.ip_label["text_fg"] = (0.3, 0.9, 0.3, 1)
+        
+        self._update_status("Internet tunnel ready!", (0.3, 0.8, 0.3, 1))
+        self._connect_as_host()
+
+    def _connect_as_host_lan(self) -> None:
+        """Connect as host (LAN only mode)."""
+        if self.ip_label:
+            local_ip = get_local_ip()
+            self.ip_label["text"] = f"LAN only - Share IP: {local_ip}:7777"
+            self.ip_label["text_fg"] = (0.9, 0.7, 0.3, 1)
+        
+        self._update_status("Server ready (LAN only - install pyngrok for internet)", (0.9, 0.7, 0.3, 1))
+        self._connect_as_host()
+
+    def _connect_as_host(self) -> None:
+        """Connect to the local server as host."""
+        self._setup_client()
+        self.client.connect("localhost", 7777, "Host")
+        self._update_status("Connecting to local server...", (0.8, 0.8, 0.3, 1))
+        Global.task_mgr.add(self._update_client, "multiplayer_client_update")
+
+    def _join_game(self) -> None:
+        """Join a remote game (supports both IP and ngrok URLs)."""
+        address = self.ip_entry.get().strip()
+        if not address:
+            self._update_status("Please enter an address", (0.8, 0.3, 0.3, 1))
+            return
+
+        # Parse address - could be "ip", "ip:port", or "host.ngrok.io:port"
+        if ":" in address:
+            parts = address.rsplit(":", 1)
+            host = parts[0]
+            try:
+                port = int(parts[1])
+            except ValueError:
+                port = 7777
+        else:
+            host = address
+            port = 7777
+
+        self._update_status(f"Connecting to {host}:{port}...", (0.8, 0.8, 0.3, 1))
+        self._setup_client()
+        self.client.connect(host, port, "Player")
+        Global.task_mgr.add(self._update_client, "multiplayer_client_update")
+
+    def _setup_client(self) -> None:
+        """Initialize the multiplayer client."""
         if self.client is None:
             self.client = MultiplayerClient()
-            self.client.on_connected = self._on_connected
-            self.client.on_disconnected = self._on_disconnected
-            self.client.on_room_list = self._on_room_list
-            self.client.on_room_update = self._on_room_update
-            self.client.on_game_start = self._on_game_start
-            self.client.on_error = self._on_error
 
-        # Connect
-        self.client.connect(host, port, name)
-        self._update_status("Connecting...", (0.8, 0.8, 0.3, 1))
-
-        # Start update task
-        Global.task_mgr.add(self._update_client, "multiplayer_client_update")
+        self.client.on_connected = self._on_connected
+        self.client.on_disconnected = self._on_disconnected
+        self.client.on_room_list = self._on_room_list
+        self.client.on_room_update = self._on_room_update
+        self.client.on_game_start = self._on_game_start
+        self.client.on_error = self._on_error
 
     def _update_client(self, task):
         """Update client to process messages."""
@@ -288,258 +372,69 @@ class MultiplayerMenu(BaseMenu):
 
     def _on_connected(self, player_id: str) -> None:
         """Handle successful connection."""
-        self._update_status("Connected", (0.3, 0.8, 0.3, 1))
-        self.connect_button["text"] = "Disconnect"
-        self.connect_button["command"] = self._disconnect
-        self.connect_button["frameColor"] = (0.8, 0.3, 0.3, 1)
+        self._update_status("Connected! Creating room...", (0.3, 0.8, 0.3, 1))
 
-        # Enable buttons
-        self.create_room_button["state"] = DGG.NORMAL
-        self.refresh_button["state"] = DGG.NORMAL
-
-        # Request room list
-        self._refresh_rooms()
+        # Automatically create/join a room
+        if self.server_process:
+            # We're the host - create a room
+            self.client.create_room("Game Room", "8ball")
+        else:
+            # We're joining - request room list and auto-join first available
+            self.client.request_room_list()
 
     def _on_disconnected(self) -> None:
         """Handle disconnection."""
         self._update_status("Disconnected", (0.8, 0.3, 0.3, 1))
-        self.connect_button["text"] = "Connect"
-        self.connect_button["command"] = self._connect_to_server
-        self.connect_button["frameColor"] = (0.3, 0.7, 0.3, 1)
-
-        # Disable buttons
-        self.create_room_button["state"] = DGG.DISABLED
-        self.refresh_button["state"] = DGG.DISABLED
-
-        # Clear room list
-        self._clear_room_list()
-
-        # Stop update task
         Global.task_mgr.remove("multiplayer_client_update")
 
     def _on_room_list(self, rooms: list[dict]) -> None:
-        """Handle room list update."""
-        self.rooms = rooms
-        self._update_room_list()
+        """Handle room list - auto-join first available room."""
+        if rooms:
+            room_id = rooms[0].get("room_id", "")
+            if room_id:
+                self.client.join_room(room_id)
+                self._update_status("Joining room...", (0.8, 0.8, 0.3, 1))
+        else:
+            self._update_status("No rooms available. Try hosting instead.", (0.8, 0.5, 0.3, 1))
 
     def _on_room_update(self, room: RoomInfo) -> None:
-        """Handle room update - navigate to lobby."""
+        """Handle room update - go to lobby."""
+        self._update_status("In lobby!", (0.3, 0.8, 0.3, 1))
         MenuNavigator.go_to_menu("multiplayer_lobby")()
 
     def _on_game_start(self, game_state) -> None:
         """Handle game start."""
-        # Transition to game
         Global.base.messenger.send("enter-game")
 
     def _on_error(self, error: str) -> None:
         """Handle error message."""
         self._update_status(f"Error: {error}", (0.8, 0.3, 0.3, 1))
 
-    def _update_status(self, text: str, color: tuple) -> None:
-        """Update status label."""
-        if self.status_label:
-            self.status_label["text"] = text
-            self.status_label["text_fg"] = color
-
-    def _disconnect(self) -> None:
-        """Disconnect from server."""
-        if self.client:
-            self.client.disconnect()
-
-    def _refresh_rooms(self) -> None:
-        """Request room list refresh."""
-        if self.client and self.client.is_connected:
-            self.client.request_room_list()
-
-    def _clear_room_list(self) -> None:
-        """Clear the room list display."""
-        if self.room_list_frame:
-            self.room_list_frame.removeAndDestroyAllItems()
-        self.rooms = []
-        if self.no_rooms_label:
-            self.no_rooms_label["text"] = "Connect to server to see rooms"
-            self.no_rooms_label.show()
-
-    def _update_room_list(self) -> None:
-        """Update the room list display."""
-        if not self.room_list_frame:
-            return
-
-        self.room_list_frame.removeAndDestroyAllItems()
-
-        if not self.rooms:
-            if self.no_rooms_label:
-                self.no_rooms_label["text"] = "No rooms available"
-                self.no_rooms_label.show()
-            return
-
-        if self.no_rooms_label:
-            self.no_rooms_label.hide()
-
-        font = load_font(BUTTON_FONT)
-
-        for room in self.rooms:
-            room_id = room.get("room_id", "")
-            room_name = room.get("room_name", "Unknown")
-            player_count = room.get("player_count", 0)
-            max_players = room.get("max_players", 2)
-            game_type = room.get("game_type", "8ball")
-
-            # Create room entry button
-            text = f"{room_name} ({player_count}/{max_players}) - {game_type}"
-            btn = DirectButton(
-                text=text,
-                text_align=TextNode.ALeft,
-                text_font=font,
-                scale=BUTTON_TEXT_SCALE * 0.6,
-                relief=DGG.RIDGE,
-                frameColor=(0.2, 0.2, 0.2, 0.8),
-                frameSize=(-0.1, 1.3, -0.03, 0.05),
-                command=self._join_room,
-                extraArgs=[room_id],
-            )
-            self.room_list_frame.addItem(btn)
-
-    def _join_room(self, room_id: str) -> None:
-        """Join a room."""
-        if self.client and self.client.is_connected:
-            self.client.join_room(room_id)
-
-    def _show_create_room_dialog(self) -> None:
-        """Navigate to room creation menu."""
-        MenuNavigator.go_to_menu("create_room")()
-
     def _go_back(self) -> None:
         """Return to main menu."""
+        # Clean up
         if self.client and self.client.is_connected:
             self.client.disconnect()
         Global.task_mgr.remove("multiplayer_client_update")
+
+        # Stop tunnel if running
+        stop_tunnel()
+        self.public_url = None
+
+        # Kill server if we started one
+        if self.server_process:
+            self.server_process.terminate()
+            self.server_process = None
+
         MenuNavigator.go_to_menu("main_menu")()
 
     def hide(self) -> None:
         """Clean up when hiding menu."""
         super().hide()
-        # Don't disconnect - keep connection alive
-
-
-class CreateRoomMenu(BaseMenu):
-    """Menu for creating a new multiplayer room."""
-
-    name: str = "create_room"
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.title = MenuTitle.create(text="Create Room")
-
-    def populate(self) -> None:
-        self.add_title(self.title)
-
-        font = load_font(BUTTON_FONT)
-
-        # Room name input
-        name_label = DirectLabel(
-            text="Room Name:",
-            scale=BUTTON_TEXT_SCALE * 0.8,
-            relief=None,
-            text_fg=TEXT_COLOR,
-            text_align=TextNode.ALeft,
-            text_font=load_font(TITLE_FONT),
-            parent=self.area.getCanvas(),
-        )
-        name_label.setPos(-0.7, 0, 0.5)
-
-        self.room_name_entry = DirectEntry(
-            text="",
-            scale=BUTTON_TEXT_SCALE * 0.6,
-            width=20,
-            relief=DGG.SUNKEN,
-            frameColor=(1, 1, 1, 0.7),
-            text_fg=TEXT_COLOR,
-            text_font=font,
-            initialText="My Room",
-            numLines=1,
-            parent=self.area.getCanvas(),
-        )
-        self.room_name_entry.setPos(-0.2, 0, 0.5)
-
-        # Game type selection
-        type_label = DirectLabel(
-            text="Game Type:",
-            scale=BUTTON_TEXT_SCALE * 0.8,
-            relief=None,
-            text_fg=TEXT_COLOR,
-            text_align=TextNode.ALeft,
-            text_font=load_font(TITLE_FONT),
-            parent=self.area.getCanvas(),
-        )
-        type_label.setPos(-0.7, 0, 0.3)
-
-        # Game type buttons
-        self.game_type = "8ball"
-        self.type_buttons = {}
-
-        for i, game_type in enumerate(["8ball", "9ball", "snooker"]):
-            btn = DirectButton(
-                text=game_type,
-                text_align=TextNode.ACenter,
-                text_font=font,
-                scale=BUTTON_TEXT_SCALE * 0.7,
-                relief=DGG.RIDGE,
-                frameColor=(0.3, 0.5, 0.8, 1) if i == 0 else (0.3, 0.3, 0.3, 1),
-                command=self._select_game_type,
-                extraArgs=[game_type],
-                parent=self.area.getCanvas(),
-            )
-            btn.setPos(-0.4 + i * 0.4, 0, 0.3)
-            self.type_buttons[game_type] = btn
-
-        # Create button
-        create_btn = DirectButton(
-            text="Create Room",
-            text_align=TextNode.ACenter,
-            text_font=font,
-            scale=BUTTON_TEXT_SCALE,
-            relief=DGG.RIDGE,
-            frameColor=(0.3, 0.7, 0.3, 1),
-            command=self._create_room,
-            parent=self.area.getCanvas(),
-        )
-        create_btn.setPos(0, 0, 0.0)
-
-        # Back button
-        back_btn = DirectButton(
-            text="Back",
-            text_align=TextNode.ACenter,
-            text_font=font,
-            scale=BUTTON_TEXT_SCALE * 0.8,
-            relief=DGG.RIDGE,
-            frameColor=(0.5, 0.5, 0.5, 1),
-            command=MenuNavigator.go_to_menu("multiplayer"),
-            parent=self.area.getCanvas(),
-        )
-        back_btn.setPos(0, 0, -0.2)
-
-    def _select_game_type(self, game_type: str) -> None:
-        """Select a game type."""
-        self.game_type = game_type
-        for gt, btn in self.type_buttons.items():
-            if gt == game_type:
-                btn["frameColor"] = (0.3, 0.5, 0.8, 1)
-            else:
-                btn["frameColor"] = (0.3, 0.3, 0.3, 1)
-
-    def _create_room(self) -> None:
-        """Create the room."""
-        from pooltool.ani.menu._registry import MenuRegistry
-
-        mp_menu = MenuRegistry.get_menu("multiplayer")
-        if mp_menu and hasattr(mp_menu, "client") and mp_menu.client:
-            room_name = self.room_name_entry.get() or "My Room"
-            mp_menu.client.create_room(room_name, self.game_type)
 
 
 class MultiplayerLobbyMenu(BaseMenu):
-    """Menu for the multiplayer game lobby."""
+    """Simplified lobby - just shows players and ready button."""
 
     name: str = "multiplayer_lobby"
 
@@ -553,57 +448,100 @@ class MultiplayerLobbyMenu(BaseMenu):
         self.add_title(self.title)
 
         font = load_font(BUTTON_FONT)
+        title_font = load_font(TITLE_FONT)
 
-        # Get client from multiplayer menu
+        # Get client
         mp_menu = MenuRegistry.get_menu("multiplayer")
-        client = None
-        if mp_menu and hasattr(mp_menu, "client"):
-            client = mp_menu.client
-
+        client = mp_menu.client if mp_menu and hasattr(mp_menu, "client") else None
         room = client.current_room if client else None
 
         # Room info
-        room_name = room.room_name if room else "Unknown Room"
-        room_info = DirectLabel(
-            text=f"Room: {room_name}",
-            scale=BUTTON_TEXT_SCALE * 0.9,
+        room_name = room.room_name if room else "Game Room"
+        room_label = DirectLabel(
+            text=room_name,
+            scale=BUTTON_TEXT_SCALE * 1.2,
             relief=None,
-            text_fg=TEXT_COLOR,
-            text_align=TextNode.ALeft,
-            text_font=load_font(TITLE_FONT),
+            text_fg=(0.9, 0.9, 0.9, 1),
+            text_align=TextNode.ACenter,
+            text_font=title_font,
             parent=self.area.getCanvas(),
         )
-        room_info.setPos(-0.7, 0, 0.5)
+        room_label.setPos(0, 0, 0.45)
 
-        # Player list header
-        player_header = DirectLabel(
-            text="Players:",
+        # Share address instruction - use public URL if available
+        share_address = mp_menu.public_url if (mp_menu and hasattr(mp_menu, "public_url") and mp_menu.public_url) else f"{get_local_ip()}:7777"
+        is_public = mp_menu and hasattr(mp_menu, "public_url") and mp_menu.public_url
+        
+        share_label = DirectLabel(
+            text=f"Share this address: {share_address}",
+            scale=BUTTON_TEXT_SCALE * 0.55,
+            relief=None,
+            text_fg=(0.3, 0.9, 0.3, 1) if is_public else (0.9, 0.7, 0.3, 1),
+            text_align=TextNode.ACenter,
+            text_font=font,
+            parent=self.area.getCanvas(),
+        )
+        share_label.setPos(0, 0, 0.32)
+        
+        # Show if it's internet or LAN only
+        mode_text = "Anyone can join!" if is_public else "(LAN only - same network)"
+        mode_label = DirectLabel(
+            text=mode_text,
+            scale=BUTTON_TEXT_SCALE * 0.45,
+            relief=None,
+            text_fg=(0.5, 0.8, 0.5, 1) if is_public else (0.6, 0.5, 0.3, 1),
+            text_align=TextNode.ACenter,
+            text_font=font,
+            parent=self.area.getCanvas(),
+        )
+        mode_label.setPos(0, 0, 0.22)
+
+        # Players section
+        players_header = DirectLabel(
+            text="Players",
             scale=BUTTON_TEXT_SCALE * 0.8,
             relief=None,
-            text_fg=TEXT_COLOR,
-            text_align=TextNode.ALeft,
-            text_font=load_font(TITLE_FONT),
+            text_fg=(0.8, 0.8, 0.8, 1),
+            text_align=TextNode.ACenter,
+            text_font=title_font,
             parent=self.area.getCanvas(),
         )
-        player_header.setPos(-0.7, 0, 0.3)
+        players_header.setPos(0, 0, 0.15)
 
         # Player list
-        if room:
+        if room and room.players:
             for i, player in enumerate(room.players):
-                status = "Ready" if player.is_ready else "Not Ready"
-                host_tag = " (Host)" if player.is_host else ""
-                you_tag = " (You)" if client and player.player_id == client.player_id else ""
+                is_you = client and player.player_id == client.player_id
+                status_icon = "✓" if player.is_ready else "○"
+                status_color = (0.3, 0.9, 0.3, 1) if player.is_ready else (0.6, 0.6, 0.6, 1)
+
+                player_text = f"{status_icon}  {player.name}"
+                if is_you:
+                    player_text += " (You)"
+                if player.is_host:
+                    player_text += " ★"
 
                 player_label = DirectLabel(
-                    text=f"{player.name}{host_tag}{you_tag} - {status}",
+                    text=player_text,
                     scale=BUTTON_TEXT_SCALE * 0.7,
                     relief=None,
-                    text_fg=(0.3, 0.8, 0.3, 1) if player.is_ready else TEXT_COLOR,
-                    text_align=TextNode.ALeft,
+                    text_fg=status_color,
+                    text_align=TextNode.ACenter,
                     text_font=font,
                     parent=self.area.getCanvas(),
                 )
-                player_label.setPos(-0.5, 0, 0.15 - i * 0.1)
+                player_label.setPos(0, 0, 0.0 - i * 0.1)
+        else:
+            waiting_label = DirectLabel(
+                text="Waiting for players...",
+                scale=BUTTON_TEXT_SCALE * 0.6,
+                relief=None,
+                text_fg=(0.5, 0.5, 0.5, 1),
+                text_align=TextNode.ACenter,
+                text_font=font,
+                parent=self.area.getCanvas(),
+            )
+            waiting_label.setPos(0, 0, 0.0)
 
         # Ready button
         is_ready = False
@@ -614,29 +552,30 @@ class MultiplayerLobbyMenu(BaseMenu):
                     break
 
         ready_btn = DirectButton(
-            text="Ready!" if not is_ready else "Not Ready",
+            text="✓ READY" if not is_ready else "✗ NOT READY",
             text_align=TextNode.ACenter,
             text_font=font,
-            scale=BUTTON_TEXT_SCALE,
+            scale=BUTTON_TEXT_SCALE * 1.1,
             relief=DGG.RIDGE,
-            frameColor=(0.3, 0.7, 0.3, 1) if not is_ready else (0.7, 0.3, 0.3, 1),
+            frameColor=(0.2, 0.7, 0.2, 1) if not is_ready else (0.7, 0.3, 0.3, 1),
+            frameSize=(-0.3, 0.3, -0.05, 0.07),
             command=self._toggle_ready,
             parent=self.area.getCanvas(),
         )
-        ready_btn.setPos(0, 0, -0.2)
+        ready_btn.setPos(0, 0, -0.35)
 
         # Leave button
         leave_btn = DirectButton(
-            text="Leave Room",
+            text="Leave",
             text_align=TextNode.ACenter,
             text_font=font,
-            scale=BUTTON_TEXT_SCALE * 0.8,
+            scale=BUTTON_TEXT_SCALE * 0.7,
             relief=DGG.RIDGE,
-            frameColor=(0.5, 0.5, 0.5, 1),
+            frameColor=(0.4, 0.4, 0.4, 1),
             command=self._leave_room,
             parent=self.area.getCanvas(),
         )
-        leave_btn.setPos(0, 0, -0.4)
+        leave_btn.setPos(0, 0, -0.55)
 
     def _toggle_ready(self) -> None:
         """Toggle ready status."""
@@ -649,6 +588,8 @@ class MultiplayerLobbyMenu(BaseMenu):
                 for p in client.current_room.players:
                     if p.player_id == client.player_id:
                         client.set_ready(not p.is_ready)
+                        # Refresh the lobby display
+                        MenuNavigator.go_to_menu("multiplayer_lobby")()
                         break
 
     def _leave_room(self) -> None:

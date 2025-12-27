@@ -1,0 +1,12 @@
+Pooltool - Online Multiplayer Edition
+Copyright 2024-2025 S1mplector (Ilgaz Mehmetoglu)
+
+This product includes software developed by Evan Kiefl (https://github.com/ekiefl/pooltool)
+Original work: Copyright 2020-2024 Evan Kiefl
+Licensed under the Apache License, Version 2.0
+
+Modifications by S1mplector majorly include, but is not limited to:
+- Added splash screen
+- Added online multiplayer functionality (server, client, protocol)
+- Added multiplayer UI menus (lobby, room browser, game setup)
+- Various bug fixes and improvements

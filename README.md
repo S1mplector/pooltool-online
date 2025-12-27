@@ -1,66 +1,90 @@
+# 🎱 Pooltool Online
+
+A billiards simulator with **online multiplayer**.
+
 <img src="https://github.com/ekiefl/pooltool/blob/main/pooltool/logo/logo.png" width="600" />
-
-[![Project Status: Active – The project has reached a stable, usable state and is being actively developed.](https://www.repostatus.org/badges/latest/active.svg)](https://www.repostatus.org/#active)
-[![GitHub license](https://img.shields.io/github/license/ekiefl/pooltool)](https://github.com/ekiefl/pooltool/blob/master/LICENSE.txt)
-[![Documentation Status](https://readthedocs.org/projects/pooltool/badge/?version=latest)](https://pooltool.readthedocs.io/en/latest/?badge=latest)
-![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/ekiefl/pooltool/test.yml)
-
-![PyPI - Version](https://img.shields.io/pypi/v/pooltool-billiards)
-![PyPI - Python Version](https://img.shields.io/pypi/pyversions/pooltool-billiards)
-[![codecov](https://codecov.io/gh/ekiefl/pooltool/graph/badge.svg)](https://codecov.io/gh/ekiefl/pooltool)
-
-[![Discord](https://img.shields.io/badge/Discord-Join%20Server-7289da?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/8Y8qUgzZhz)
 
 # Description
 
-*Pooltool* is a general purpose billiards simulator crafted specifically for science and engineering.
+*Pooltool Online* is a realistic billiards simulator featuring:
 
-Its core design principles focus on speed, flexibility, and the ease of visualization and analysis. With an interactive 3D interface, a robust API, and extensive documentation, pooltool aims to be a systemic tool in billiards-related research. Continuously evolving through active maintenance and bolstered by a growing community, this vision for pooltool emphasizes not just its current capabilities, but also its potential for growth and adaptation within billiards simulation.
+- 🌐 **Online Multiplayer** - Play pool with friends over the internet
+- 🎮 **3D Graphics** - Powered by Panda3D
+- 🎯 **Realistic Physics** - Accurate ball dynamics and collision detection
+- 🎱 **Multiple Game Modes** - 8-ball, 9-ball, snooker, and more
+- 🔧 **Extensible API** - Build your own pool AI or custom game modes
 
-Pooltool is peer-reviewed and published in the **Journal of Open Source Software** (JOSS) and **pyOpenSci**.
+## New in this Fork
 
-[![DOI](https://joss.theoj.org/papers/10.21105/joss.07301/status.svg)](https://doi.org/10.21105/joss.07301)
-[![pyOpenSci Peer-Reviewed](https://pyopensci.org/badges/peer-reviewed.svg)](https://github.com/pyOpenSci/software-review/issues/173)
+- 🌐 **Online Multiplayer System** - Full client/server architecture
+- 🏠 **Room-based Matchmaking** - Create and join game rooms
+- 💬 **Real-time Sync** - See opponent shots live
 
 # Gallery
 
 <img src="https://ekiefl.github.io/images/pooltool/pooltool-graphics/gallery_1.png" width="350" /><img src="https://ekiefl.github.io/images/pooltool/pooltool-graphics/gallery_2.png" width="350" /><img src="https://ekiefl.github.io/images/pooltool/pooltool-graphics/gallery_3.png" width="350" /><img src="https://ekiefl.github.io/images/pooltool/pooltool-graphics/gallery_5.png" width="350" /><img src="https://ekiefl.github.io/images/pooltool/pooltool-graphics/gallery_6.png" width="350" /><img src="https://ekiefl.github.io/images/pooltool/pooltool-graphics/gallery_7.png" width="350" />
 
-# Installation & Documentation
+# Installation
 
-<a href="https://pooltool.readthedocs.io">
-  <img src="https://github.com/ekiefl/pooltool/assets/8688665/744fcd33-2e6a-4b8d-a727-634bb8295124" width="200" alt="rtd">
-</a>
+## Quick Start
 
-All resources are hosted at [https://pooltool.readthedocs.io](https://pooltool.readthedocs.io).
+```bash
+# Clone the repo
+git clone https://github.com/YOUR_USERNAME/pooltool.git
+cd pooltool
 
-Quick links:
+# Create virtual environment
+python -m venv .venv
+source .venv/bin/activate.fish  # or .venv/bin/activate for bash/zsh
 
-1. [🛠️ **Installation**](https://pooltool.readthedocs.io/en/latest/getting_started/install.html)
-1. [📚 Examples](https://pooltool.readthedocs.io/en/latest/examples/index.html)
-1. [🔌 API Reference](https://pooltool.readthedocs.io/en/latest/autoapi/pooltool/index.html)
+# Install
+pip install poetry==1.8.4
+poetry install
 
-# Join the community
+# Run the game
+poetry run run-pooltool
+```
 
-[![Discord](https://img.shields.io/badge/Discord-Join%20Server-7289da?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/8Y8qUgzZhz)
+## Running the Multiplayer Server
 
-If you want to ask questions, get help, or contribute to the codebase, please join the Discord and introduce yourself.
+```bash
+# In a separate terminal
+poetry run run-pooltool-server
+```
 
-If the Discord link is expired, please make an issue in this repo.
+Then in-game: **Main Menu → Online Multiplayer → Connect to `localhost:7777`**
 
-# Contributing
+# Usage
 
-See the [Contributing page](https://pooltool.readthedocs.io/en/latest/meta/contributing.html) in the documentation.
+## Single Player
+1. Launch the game with `poetry run run-pooltool`
+2. Click through the splash screen
+3. Select **New Game** from the main menu
+4. Choose your game type and start playing!
 
-# Blog
+## Online Multiplayer
 
-Many aspects of this project have been blogged about. Read the detailed account [here](https://ekiefl.github.io/projects/pooltool/).
+### Host a Game (anyone can join from anywhere!)
+1. Launch the game and go to **Online Multiplayer**
+2. Click **Host Game**
+3. Share the address shown with your friend (works over the internet!)
+4. Wait for them to join and click **Ready**
 
-# Citation
+### Join a Game
+1. Launch the game and go to **Online Multiplayer**  
+2. Enter the address your friend shared
+3. Click **Join Game**
+4. Click **Ready** when you're in the lobby
 
-If you use pooltool in your research/project/product, please cite the JOSS publication:
+> **Note:** Internet play uses ngrok tunneling. The address format is like `0.tcp.ngrok.io:12345`
 
-[![DOI](https://joss.theoj.org/papers/10.21105/joss.07301/status.svg)](https://doi.org/10.21105/joss.07301)
+# Credits
+
+This project is a fork of [pooltool](https://github.com/ekiefl/pooltool) by **Evan Kiefl**.
+
+Original work licensed under Apache 2.0. See [NOTICE](NOTICE) for attribution details.
+
+If you use the physics engine in research, please cite the original JOSS publication:
 
 ```
 @article{Kiefl2024,
@@ -76,3 +100,7 @@ If you use pooltool in your research/project/product, please cite the JOSS publi
     journal = {Journal of Open Source Software}
 }
 ```
+
+# License
+
+Apache 2.0 - See [LICENSE.txt](LICENSE.txt)

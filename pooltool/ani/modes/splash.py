@@ -28,6 +28,7 @@ class SplashMode(BaseMode):
         self.splash_frame = None
         self.presenter_label = None
         self.logo_image = None
+        self.online_label = None
         self.fade_task_name = "splash_fade_task"
         self.auto_advance_task_name = "splash_auto_advance"
 
@@ -59,11 +60,23 @@ class SplashMode(BaseMode):
         # Add the pooltool logo below
         self.logo_image = OnscreenImage(
             image=logo_paths["default"],
-            pos=(0, 0, -0.25),
+            pos=(0, 0, -0.2),
             parent=self.splash_frame,
             scale=(1.4 * 0.2, 1, 1.4 * 0.18),
         )
         self.logo_image.setTransparency(TransparencyAttrib.MAlpha)
+
+        # "Online" label below the logo
+        self.online_label = DirectLabel(
+            text="Online",
+            text_font=title_font,
+            scale=0.08,
+            pos=(0, 0, -0.45),
+            parent=self.splash_frame,
+            relief=None,
+            text_fg=(0.3, 0.7, 0.9, 1),  # Blue color
+            text_align=TextNode.ACenter,
+        )
 
         # Register events to skip splash
         self.register_keymap_event("escape", Action.exit, True)
@@ -94,6 +107,10 @@ class SplashMode(BaseMode):
         if self.logo_image:
             self.logo_image.destroy()
             self.logo_image = None
+
+        if self.online_label:
+            self.online_label.destroy()
+            self.online_label = None
 
         # Remove tasks
         tasks.remove("splash_task")
