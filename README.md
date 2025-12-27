@@ -26,33 +26,31 @@ A billiards simulator with **online multiplayer**.
 
 # Installation
 
-## Quick Start
+## One-Click Launch (Recommended)
 
 ```bash
 # Clone the repo
 git clone https://github.com/YOUR_USERNAME/pooltool.git
 cd pooltool
 
-# Create virtual environment
-python -m venv .venv
-source .venv/bin/activate.fish  # or .venv/bin/activate for bash/zsh
-
-# Install
-pip install poetry==1.8.4
-poetry install
-
-# Run the game
-poetry run run-pooltool
+# Run it!
+./run.sh        # macOS/Linux
+run.bat         # Windows
 ```
 
-## Running the Multiplayer Server
+That's it! The script handles everything: virtual environment, dependencies, and launching the game.
+
+## Manual Setup
+
+If you prefer manual setup:
 
 ```bash
-# In a separate terminal
-poetry run run-pooltool-server
+python -m venv .venv
+source .venv/bin/activate  # or .venv\Scripts\activate on Windows
+pip install poetry==1.8.4
+poetry install
+poetry run run-pooltool
 ```
-
-Then in-game: **Main Menu → Online Multiplayer → Connect to `localhost:7777`**
 
 # Usage
 

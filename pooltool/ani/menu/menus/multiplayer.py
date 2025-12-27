@@ -136,6 +136,8 @@ class MultiplayerMenu(BaseMenu):
             frameSize=(-0.75, 0.75, -0.25, 0.15),
             pos=(0, 0, 0.25),
             parent=self.area.getCanvas(),
+            state=DGG.NORMAL,
+            suppressMouse=False,
         )
 
         host_title = DirectLabel(
@@ -179,6 +181,8 @@ class MultiplayerMenu(BaseMenu):
             frameSize=(-0.75, 0.75, -0.35, 0.15),
             pos=(0, 0, -0.25),
             parent=self.area.getCanvas(),
+            state=DGG.NORMAL,
+            suppressMouse=False,
         )
 
         join_title = DirectLabel(
