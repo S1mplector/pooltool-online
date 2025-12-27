@@ -83,6 +83,8 @@ echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━
 echo -e "${GREEN}                      Starting Pooltool Online...                         ${NC}"
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
+echo -e "Tip: Run ${YELLOW}./run.sh --fast${NC} for better performance on macOS"
+echo ""
 
 # Run the game
 poetry run run-pooltool "$@"

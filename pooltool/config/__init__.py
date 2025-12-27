@@ -144,11 +144,12 @@ class GraphicsConfig:
         ),
     )
     max_lights: int = settings_field(
-        default=13,
+        default=4,
         metadata=SettingsMetadata(
             display_name="Maximum Lights",
             description=(
-                "Maximum number of dynamic lights that can be rendered simultaneously."
+                "Maximum number of dynamic lights that can be rendered simultaneously. "
+                "Lower values may improve performance on certain systems."
             ),
             category=SettingsCategory.GRAPHICS,
             display_type=DisplayType.NONE,

@@ -40,6 +40,16 @@ run.bat         # Windows
 
 That's it! The script handles everything: virtual environment, dependencies, and launching the game.
 
+### Performance Mode (macOS)
+
+If you're getting low FPS on macOS (especially Apple Silicon), use performance mode:
+
+```bash
+./run.sh --fast
+```
+
+This disables advanced shaders and reduces graphics settings for smoother gameplay.
+
 ## Manual Setup
 
 If you prefer manual setup:
@@ -62,7 +72,7 @@ poetry run run-pooltool
 
 ## Online Multiplayer
 
-### Host a Game (anyone can join from anywhere!)
+### Host a Game (anyone can join from anywhere)
 1. Launch the game and go to **Online Multiplayer**
 2. Click **Host Game**
 3. Share the address shown with your friend (works over the internet!)
