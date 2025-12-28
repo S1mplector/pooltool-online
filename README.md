@@ -1,6 +1,6 @@
 # 🎱 Pooltool Online
 
-A billiards simulator with **online multiplayer**.
+A fork of pooltool with online multiplayer.
 
 <img src="pooltool/logo/logo_online.png" width="600" />
 
