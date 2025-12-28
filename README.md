@@ -92,7 +92,7 @@ This project is a fork of [pooltool](https://github.com/ekiefl/pooltool) by **Ev
 
 Original work licensed under Apache 2.0. See [NOTICE](NOTICE) for attribution details.
 
-If you use the physics engine in research, please cite the original JOSS publication:
+If you use the physics engine in research, please cite the original JOSS publication.
 
 ```
 @article{Kiefl2024,
