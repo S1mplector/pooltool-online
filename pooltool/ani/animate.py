@@ -499,10 +499,16 @@ class Game(Interface):
         """Create the multisystem and game objects"""
         game_type = settings.gameplay.game_type
         game = get_ruleset(game_type, enforce_rules=settings.gameplay.enforce_rules)()
-        game.players = [
-            Player("Player 1"),
-            Player("Player 2"),
-        ]
+
+        # Try to get player names from multiplayer client
+        player_names = self._get_multiplayer_player_names()
+        if player_names:
+            game.players = [Player(name) for name in player_names]
+        else:
+            game.players = [
+                Player("Player 1"),
+                Player("Player 2"),
+            ]
 
         table = Table.from_table_specs(prebuilt_specs(settings.gameplay.table_name))
         balls = get_rack(
@@ -517,6 +523,18 @@ class Game(Interface):
 
         self.attach_system(shot)
         self.attach_ruleset(game)
+
+    def _get_multiplayer_player_names(self) -> list[str] | None:
+        """Get player names from multiplayer client if available."""
+        try:
+            mp_menu = MenuRegistry.get_menu("multiplayer")
+            if mp_menu and hasattr(mp_menu, "client") and mp_menu.client:
+                client = mp_menu.client
+                if client.current_room and client.current_room.players:
+                    return [p.name for p in client.current_room.players]
+        except Exception:
+            pass
+        return None
 
     def attach_system(self, system: System) -> None:
         multisystem.reset()

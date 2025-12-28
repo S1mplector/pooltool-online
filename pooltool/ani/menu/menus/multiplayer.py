@@ -424,8 +424,17 @@ class MultiplayerMenu(BaseMenu):
         Global.base.messenger.send("enter-game")
 
     def _on_error(self, error: str) -> None:
-        """Handle error message."""
-        self._update_status(f"Error: {error}", (0.8, 0.3, 0.3, 1))
+        """Handle error message with user-friendly messages."""
+        # Map technical errors to user-friendly messages
+        error_messages = {
+            "Connection refused": "Could not connect to server. Is it running?",
+            "Connection timeout": "Lost connection to server",
+            "Room not found": "The game room no longer exists",
+            "Room is full": "This room is already full",
+            "Game already in progress": "Cannot join - game already started",
+        }
+        display_error = error_messages.get(error, error)
+        self._update_status(f"Error: {display_error}", (0.8, 0.3, 0.3, 1))
 
     def _go_back(self) -> None:
         """Return to main menu."""
@@ -449,6 +458,20 @@ class MultiplayerMenu(BaseMenu):
         """Clean up when hiding menu."""
         super().hide()
 
+    def cleanup(self) -> None:
+        """Full cleanup of multiplayer resources."""
+        Global.task_mgr.remove("multiplayer_client_update")
+        stop_tunnel()
+        self.public_url = None
+
+        if self.client and self.client.is_connected:
+            self.client.disconnect()
+            self.client = None
+
+        if self.server_process:
+            self.server_process.terminate()
+            self.server_process = None
+
 
 class MultiplayerLobbyMenu(BaseMenu):
     """ Lobby - shows players, ready button, and start game for host."""
@@ -459,6 +482,7 @@ class MultiplayerLobbyMenu(BaseMenu):
         super().__init__()
         self._dynamic_elements = []
         self._callbacks_registered = False
+        self._last_error: str | None = None
 
     def _clear_dynamic_elements(self) -> None:
         """Clear all dynamically created elements to prevent overlap on refresh."""
@@ -670,6 +694,22 @@ class MultiplayerLobbyMenu(BaseMenu):
         self._dynamic_elements.append(leave_btn)
         leave_btn.setPos(0, 0, btn_y)
 
+        # Show error message if any
+        if self._last_error:
+            error_label = DirectLabel(
+                text=f"Error: {self._last_error}",
+                scale=BUTTON_TEXT_SCALE * 0.5,
+                relief=None,
+                text_fg=(0.9, 0.3, 0.3, 1),
+                text_align=TextNode.ACenter,
+                text_font=font,
+                parent=self.area.getCanvas(),
+            )
+            error_label.setPos(0, 0, -0.7)
+            self._dynamic_elements.append(error_label)
+            # Clear error after displaying
+            self._last_error = None
+
     def _toggle_ready(self) -> None:
         """Toggle ready status."""
         from pooltool.ani.menu._registry import MenuRegistry
@@ -753,6 +793,12 @@ class MultiplayerLobbyMenu(BaseMenu):
         Global.base.messenger.send("enter-game")
 
     def _on_lobby_error(self, error: str) -> None:
-        """Handle error in lobby."""
-        # Could show a toast/notification here
-        pass
+        """Handle error in lobby - store and refresh to show error state."""
+        self._last_error = error
+        self._refresh_lobby()
+
+    def hide(self) -> None:
+        """Clean up when hiding lobby menu."""
+        self._clear_dynamic_elements()
+        self._callbacks_registered = False
+        super().hide()
