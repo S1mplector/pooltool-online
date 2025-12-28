@@ -88,7 +88,7 @@ poetry run run-pooltool
 
 # Credits
 
-This project is a fork of [pooltool](https://github.com/ekiefl/pooltool) by **Evan Kiefl**.
+This project is a fork of [pooltool](https://github.com/ekiefl/pooltool) by **Evan Kiefl** respectfully. 
 
 Original work licensed under Apache 2.0. See [NOTICE](NOTICE) for attribution details.
 
