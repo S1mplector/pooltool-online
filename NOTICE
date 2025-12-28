@@ -9,4 +9,6 @@ Modifications by S1mplector majorly include, but is not limited to:
 - Added splash screen
 - Added online multiplayer functionality (full server, client, protocol)
 - Added multiplayer UI menus (lobby, room browser, game setup)
-- Various bug fixes and improvements
+- Bug fixes and improvements for MacOS (window focus, aspect ratio)
+- Added performance mode for MacOS 
+- Added MPS backend support for MacOS (macOS 12+)

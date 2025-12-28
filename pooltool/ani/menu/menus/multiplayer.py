@@ -32,6 +32,27 @@ from pooltool.ani.menu._registry import MenuNavigator
 from pooltool.multiplayer import MultiplayerClient
 from pooltool.multiplayer.protocol import RoomInfo
 
+def copy_to_clipboard(text: str) -> bool:
+    """Copy text to clipboard. Returns True if successful."""
+    try:
+        import subprocess
+        import sys
+        if sys.platform == "darwin":  # macOS
+            subprocess.run(["pbcopy"], input=text.encode(), check=True)
+            return True
+        elif sys.platform == "win32":  # Windows
+            subprocess.run(["clip"], input=text.encode(), check=True)
+            return True
+        else:  # Linux
+            try:
+                subprocess.run(["xclip", "-selection", "clipboard"], input=text.encode(), check=True)
+                return True
+            except FileNotFoundError:
+                subprocess.run(["xsel", "--clipboard", "--input"], input=text.encode(), check=True)
+                return True
+    except Exception:
+        return False
+
 # Global tunnel state
 _tunnel_url: str | None = None
 _ngrok_process = None
@@ -530,36 +551,71 @@ class MultiplayerLobbyMenu(BaseMenu):
                     is_ready = p.is_ready
             all_ready = all(p.is_ready for p in room.players) and len(room.players) >= 2
 
-        # Share address instruction - use public URL if available
-        share_address = mp_menu.public_url if (mp_menu and hasattr(mp_menu, "public_url") and mp_menu.public_url) else f"{get_local_ip()}:7777"
-        is_public = mp_menu and hasattr(mp_menu, "public_url") and mp_menu.public_url
+        # Share address section - only show for host
+        is_hosting = mp_menu and hasattr(mp_menu, "server_process") and mp_menu.server_process is not None
+        
+        if is_hosting:
+            share_address = mp_menu.public_url if (mp_menu and hasattr(mp_menu, "public_url") and mp_menu.public_url) else f"{get_local_ip()}:7777"
+            is_public = mp_menu and hasattr(mp_menu, "public_url") and mp_menu.public_url
+            self._share_address = share_address  # Store for copy button
 
-        share_label = DirectLabel(
-            text=f"Share: {share_address}",
-            scale=BUTTON_TEXT_SCALE * 0.6,
-            relief=None,
-            text_fg=(0.3, 0.9, 0.3, 1) if is_public else (0.9, 0.7, 0.3, 1),
-            text_align=TextNode.ACenter,
-            text_font=font,
-            parent=self.area.getCanvas(),
-        )
-        share_label.setPos(0, 0, 0.50)
-        self._dynamic_elements.append(share_label)
+            share_label = DirectLabel(
+                text=f"Share: {share_address}",
+                scale=BUTTON_TEXT_SCALE * 0.6,
+                relief=None,
+                text_fg=(0.3, 0.9, 0.3, 1) if is_public else (0.9, 0.7, 0.3, 1),
+                text_align=TextNode.ACenter,
+                text_font=font,
+                parent=self.area.getCanvas(),
+            )
+            share_label.setPos(0, 0, 0.52)
+            self._dynamic_elements.append(share_label)
 
-        mode_text = "(Internet)" if is_public else "(LAN only)"
-        mode_label = DirectLabel(
-            text=mode_text,
-            scale=BUTTON_TEXT_SCALE * 0.4,
-            relief=None,
-            text_fg=(0.5, 0.8, 0.5, 1) if is_public else (0.6, 0.5, 0.3, 1),
-            text_align=TextNode.ACenter,
-            text_font=font,
-            parent=self.area.getCanvas(),
-        )
-        mode_label.setPos(0, 0, 0.40)
-        self._dynamic_elements.append(mode_label)
+            # Copy button for share address
+            self._copy_btn_text = "Copy Link"
+            copy_btn = DirectButton(
+                text=self._copy_btn_text,
+                text_align=TextNode.ACenter,
+                text_font=font,
+                scale=BUTTON_TEXT_SCALE * 0.7,
+                relief=DGG.RIDGE,
+                frameColor=(0.3, 0.5, 0.3, 1),
+                frameSize=(-0.25, 0.25, -0.05, 0.07),
+                command=self._copy_share_link,
+                parent=self.area.getCanvas(),
+            )
+            copy_btn.setPos(0, 0, 0.42)
+            self._dynamic_elements.append(copy_btn)
+            self._copy_btn = copy_btn
 
-        # Players section header
+            mode_text = "(Internet)" if is_public else "(LAN only)"
+            mode_label = DirectLabel(
+                text=mode_text,
+                scale=BUTTON_TEXT_SCALE * 0.4,
+                relief=None,
+                text_fg=(0.5, 0.8, 0.5, 1) if is_public else (0.6, 0.5, 0.3, 1),
+                text_align=TextNode.ACenter,
+                text_font=font,
+                parent=self.area.getCanvas(),
+            )
+            mode_label.setPos(0, 0, 0.33)
+            self._dynamic_elements.append(mode_label)
+        else:
+            # Non-host sees a waiting message instead
+            waiting_host_label = DirectLabel(
+                text="Connected to host's game",
+                scale=BUTTON_TEXT_SCALE * 0.6,
+                relief=None,
+                text_fg=(0.3, 0.8, 0.9, 1),
+                text_align=TextNode.ACenter,
+                text_font=font,
+                parent=self.area.getCanvas(),
+            )
+            waiting_host_label.setPos(0, 0, 0.45)
+            self._dynamic_elements.append(waiting_host_label)
+
+        # Players section header - adjust position based on whether share section is shown
+        players_header_y = 0.20 if is_hosting else 0.30
         players_header = DirectLabel(
             text="--- Players ---",
             scale=BUTTON_TEXT_SCALE * 0.7,
@@ -569,11 +625,11 @@ class MultiplayerLobbyMenu(BaseMenu):
             text_font=title_font,
             parent=self.area.getCanvas(),
         )
-        players_header.setPos(0, 0, 0.25)
+        players_header.setPos(0, 0, players_header_y)
         self._dynamic_elements.append(players_header)
 
-        # Player list - cleaner layout
-        y_pos = 0.10
+        # Player list - cleaner layout, adjust based on share section
+        y_pos = 0.05 if is_hosting else 0.15
         if room and room.players:
             for player in room.players:
                 is_you = client and player.player_id == client.player_id
@@ -710,6 +766,30 @@ class MultiplayerLobbyMenu(BaseMenu):
             # Clear error after displaying
             self._last_error = None
 
+    def _copy_share_link(self) -> None:
+        """Copy the share link to clipboard."""
+        if hasattr(self, "_share_address") and self._share_address:
+            success = copy_to_clipboard(self._share_address)
+            if success and hasattr(self, "_copy_btn"):
+                # Update button text to show success
+                self._copy_btn["text"] = "Copied!"
+                self._copy_btn["frameColor"] = (0.2, 0.7, 0.2, 1)
+                # Reset after 2 seconds
+                Global.task_mgr.doMethodLater(
+                    2.0,
+                    lambda task: self._reset_copy_btn(),
+                    "reset_copy_btn"
+                )
+
+    def _reset_copy_btn(self) -> None:
+        """Reset copy button text after showing 'Copied!'"""
+        if hasattr(self, "_copy_btn") and self._copy_btn:
+            try:
+                self._copy_btn["text"] = "Copy Link"
+                self._copy_btn["frameColor"] = (0.3, 0.5, 0.3, 1)
+            except Exception:
+                pass  # Button may have been destroyed
+
     def _toggle_ready(self) -> None:
         """Toggle ready status."""
         from pooltool.ani.menu._registry import MenuRegistry
@@ -747,31 +827,22 @@ class MultiplayerLobbyMenu(BaseMenu):
 
     def _register_lobby_callbacks(self, client) -> None:
         """Register callbacks for lobby auto-refresh."""
-        # Store original callbacks to chain them
-        original_room_update = client.on_room_update
-        original_game_start = client.on_game_start
-        original_error = client.on_error
+        # Store reference to self for closures
+        lobby = self
 
         def on_room_update(room):
-            # Call original if it exists
-            if original_room_update:
-                original_room_update(room)
-            # Refresh lobby UI
-            self._refresh_lobby()
+            # Update local room state
+            client.current_room = room
+            # Refresh lobby UI if still in lobby
+            lobby._refresh_lobby()
 
         def on_game_start(game_state):
-            # Call original if it exists
-            if original_game_start:
-                original_game_start(game_state)
             # Transition to game
-            self._on_game_start(game_state)
+            lobby._on_game_start(game_state)
 
         def on_error(error):
-            # Call original if it exists
-            if original_error:
-                original_error(error)
             # Show error in lobby
-            self._on_lobby_error(error)
+            lobby._on_lobby_error(error)
 
         client.on_room_update = on_room_update
         client.on_game_start = on_game_start

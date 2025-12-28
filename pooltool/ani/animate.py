@@ -82,9 +82,18 @@ def window_task(win=None):
     user, this will override their resizing, and resize the window to one with an
     area equal to that requested, but at the required aspect ratio.
     """
+    # Skip if window is not ready yet (prevents assertion errors during initialization)
+    if hasattr(Global.base, '_window_ready') and not Global.base._window_ready:
+        return
+    
     no_purgatory_modes = {Mode.purgatory, Mode.menu}
 
-    is_window_active = Global.base.win.get_properties().foreground
+    try:
+        props = Global.base.win.get_properties()
+        is_window_active = props.foreground if props.has_foreground() else True
+    except (AttributeError, AssertionError):
+        is_window_active = True
+
     if not is_window_active and Global.mode_mgr.mode not in no_purgatory_modes:
         Global.mode_mgr.change_mode(Mode.purgatory)
 
@@ -106,7 +115,10 @@ def window_task(win=None):
 
     properties = WindowProperties()
     properties.setSize(int(width), int(height))
-    Global.base.win.requestProperties(properties)
+    try:
+        Global.base.win.requestProperties(properties)
+    except (AttributeError, AssertionError):
+        pass
 
 
 def _resize_offscreen_window(size: tuple[int, int]):
@@ -124,6 +136,7 @@ def _init_simplepbr() -> simplepbr.Pipeline:
 class Interface(ShowBase):
     def __init__(self, config: ShowBaseConfig):
         self.showbase_config = config
+        self._window_ready = False
         super().__init__(self, windowType=self.showbase_config.window_type)
 
         self.openMainWindow(
@@ -158,6 +171,14 @@ class Interface(ShowBase):
             tasks.add(self.monitor, "monitor")
 
         self._listen_constant_events()
+        
+        # Mark window as ready after a few frames
+        Global.task_mgr.doMethodLater(0.5, self._mark_window_ready, "mark_window_ready")
+
+    def _mark_window_ready(self, task):
+        """Mark window as ready after initialization."""
+        self._window_ready = True
+        return task.done
 
     def _listen_constant_events(self):
         """Listen for events that are mode independent"""

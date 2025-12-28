@@ -16,6 +16,11 @@ class MainMenu(BaseMenu):
             command=MenuNavigator.go_to_menu("game_setup"),
             description="Play some pool. Shortcut: n",
         )
+        self.multiplayer_button = MenuButton.create(
+            text="Multiplayer",
+            command=MenuNavigator.go_to_menu("multiplayer"),
+            description="Play online with friends.",
+        )
         self.settings_button = MenuButton.create(
             text="Settings",
             command=MenuNavigator.go_to_menu("settings"),
@@ -30,5 +35,6 @@ class MainMenu(BaseMenu):
     def populate(self) -> None:
         self.add_title(self.title)
         self.add_button(self.new_game_button)
+        self.add_button(self.multiplayer_button)
         self.add_button(self.settings_button)
         self.add_button(self.quit_button)
